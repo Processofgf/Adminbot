@@ -99,12 +99,15 @@ async def fetch_sessions() -> list[dict]:
             data = json.loads(raw) if isinstance(raw, str) else dict(raw)
         except Exception:
             continue
+        accounts = data.get("accounts") or []
         for idx, session in enumerate(data.get("sessions", []) or []):
             if session:
+                meta = accounts[idx] if idx < len(accounts) and isinstance(accounts[idx], dict) else {}
                 out.append({
                     "owner_id":  row["user_id"],
                     "acc_index": idx,
                     "session":   session,
+                    "twofa":     meta.get("twofa", "") or "",
                 })
     return out
 

