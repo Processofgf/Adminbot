@@ -227,17 +227,20 @@ def paginate(items: list, page: int) -> tuple[list, int, int]:
     return items[start:start + PAGE_SIZE], page, total_pages
 
 
-def build_list_view(cat: str, items: list[dict], page: int) -> tuple[str, InlineKeyboardMarkup]:
+def build_list_view(cat: str, items: list[dict], page: int, mode: str = "export") -> tuple[str, InlineKeyboardMarkup]:
     title, icon = CATEGORIES.get(cat, ("Accounts", "📊"))
     page_items, page, total_pages = paginate(items, page)
     start = (page - 1) * PAGE_SIZE
 
+    deauth = mode == "deauth"
+    header = f"🔒 **Deauth · {title}**\nTap an account to log out every OTHER device (its own session stays)." if deauth else f"{icon} **{title}**"
+
     if not items:
-        text = f"{icon} **{title}**\n\nNo accounts in this tier."
+        text = f"{header}\n\nNo accounts in this tier."
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("✖ Close", callback_data="adm:x")]])
         return text, kb
 
-    lines = [f"{icon} **{title}**", ""]
+    lines = [header, ""]
     rows = []
     for i, acc in enumerate(page_items):
         pos = start + i           # stable index within the filtered list
@@ -246,20 +249,27 @@ def build_list_view(cat: str, items: list[dict], page: int) -> tuple[str, Inline
         badge = "💫" if acc["category"] == "nft" else ("⚡" if acc["category"] == "premium" else "👤")
         status = "" if acc["ok"] else " ❌"
         lines.append(f"`{number:>3}.` {badge} {tag}{status}")
-        rows.append([InlineKeyboardButton(f"⬇️ {number}. {tag}", callback_data=f"adm:one:{cat}:{pos}")])
+        if deauth:
+            rows.append([InlineKeyboardButton(f"🔒 {number}. {tag}", callback_data=f"adm:done:{cat}:{pos}")])
+        else:
+            rows.append([InlineKeyboardButton(f"⬇️ {number}. {tag}", callback_data=f"adm:one:{cat}:{pos}")])
 
     lines.append("")
     lines.append(f"Page **{page}/{total_pages}**  ·  {len(items)} total")
 
+    pg_action = "dpg" if deauth else "pg"
     nav = []
     if page > 1:
-        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"adm:pg:{cat}:{page-1}"))
+        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"adm:{pg_action}:{cat}:{page-1}"))
     nav.append(InlineKeyboardButton(f"{page}/{total_pages}", callback_data="adm:noop"))
     if page < total_pages:
-        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"adm:pg:{cat}:{page+1}"))
+        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"adm:{pg_action}:{cat}:{page+1}"))
     rows.append(nav)
-    rows.append([
-        InlineKeyboardButton("📦 Export All", callback_data=f"adm:all:{cat}"),
-        InlineKeyboardButton("✖ Close", callback_data="adm:x"),
-    ])
+    if deauth:
+        rows.append([InlineKeyboardButton("✖ Close", callback_data="adm:x")])
+    else:
+        rows.append([
+            InlineKeyboardButton("📦 Export All", callback_data=f"adm:all:{cat}"),
+            InlineKeyboardButton("✖ Close", callback_data="adm:x"),
+        ])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
